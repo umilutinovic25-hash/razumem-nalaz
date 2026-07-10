@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<title>Razumem nalaz — dešifrator laboratorijskih nalaza</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Slikaj laboratorijski nalaz i saznaj šta svaki parametar znači — na srpskom, potpuno lokalno na tvom telefonu.">
+<meta name="theme-color" content="#0e7c86">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Razumem nalaz">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Laboratorijski nalaz, na ljudskom jeziku</p>
+      <div class="brand">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M2 12h4l2-7 4 14 2.5-7H22" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <h1>Razumem nalaz</h1>
+      </div>
+      <p class="tagline">Slikaj svoj laboratorijski nalaz — pročitam ga i objasnim šta svaki parametar znači, šta je van referentnog opsega i koja pitanja da postaviš lekaru.</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" aria-label="Promeni temu">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <span id="themeLbl">Tamna</span>
+    </button>
+  </header>
+
+  <div class="disclaimer">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><b>Edukativna alatka, ne medicinski savet.</b> Referentni opsezi variraju od laboratorije do laboratorije i zavise od pola, uzrasta i konteksta. Nalaz uvek tumači tvoj lekar. Sve se obrađuje lokalno na tvom uređaju — slika ne napušta telefon.</div>
+  </div>
+
+  <section class="io">
+    <div class="cam-row">
+      <button class="cam-btn" id="btnCamera">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M3 9a2 2 0 012-2h1.5l1-2h5l1 2H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg>
+        <span class="t">Slikaj nalaz</span>
+        <span class="s">Otvori kameru</span>
+      </button>
+      <button class="cam-btn" id="btnGallery">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="8.5" cy="9" r="1.6" stroke="currentColor" stroke-width="1.6"/><path d="M4 17l4.5-4.5 3 3L15 12l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="t">Izaberi sliku</span>
+        <span class="s">Iz galerije</span>
+      </button>
+    </div>
+    <input type="file" id="fileCamera" accept="image/*" capture="environment" hidden>
+    <input type="file" id="fileGallery" accept="image/*" hidden>
+
+    <div class="ocr" id="ocr">
+      <img id="ocrThumb" alt="" >
+      <div class="info">
+        <div class="lab" id="ocrLab">Čitam tekst sa slike…</div>
+        <div class="bar"><i id="ocrBar"></i></div>
+        <div class="pct" id="ocrPct">0%</div>
+      </div>
+      <div class="spin" id="ocrSpin"></div>
+    </div>
+
+    <div class="divider">ili unesi tekst ručno</div>
+
+    <div class="io-head">
+      <h2>Tekst nalaza</h2>
+      <label class="hint">svaki parametar u svom redu — možeš da ispraviš očitano</label>
+    </div>
+    <textarea id="input" spellcheck="false" placeholder="Npr.
+Hemoglobin        118 g/L
+Leukociti         11,3 x10^9/L
+Glukoza           6,4 mmol/L
+Holesterol        6,8 mmol/L
+Gvožđe            7 umol/L
+TSH               3,1 mIU/L"></textarea>
+
+    <div class="controls">
+      <button class="btn primary" id="analyze">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12h4l2-7 4 14 2.5-7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Objasni nalaz
+      </button>
+      <button class="btn ghost" id="demo">Primer</button>
+      <button class="btn ghost" id="clear">Obriši</button>
+      <div class="seg" role="group" aria-label="Pol">
+        <span class="seg-label">Pol:</span>
+        <button data-sex="f" aria-pressed="false">Žena</button>
+        <button data-sex="m" aria-pressed="true">Muškarac</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="summary" id="summary" aria-live="polite">
+    <h2 class="section">Pregled</h2>
+    <div class="sum-grid" id="sumGrid"></div>
+  </section>
+
+  <section id="resultsWrap">
+    <div class="empty" id="empty">Nema prepoznatih parametara. Proveri da je svaki u svom redu, npr. <code>Hemoglobin 118 g/L</code>.</div>
+    <div class="cards" id="cards"></div>
+    <div class="unknown" id="unknown"></div>
+    <div class="qbox" id="qbox">
+      <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="var(--accent)" stroke-width="2"/></svg> Pitanja za lekara</h3>
+      <ul id="qlist"></ul>
+    </div>
+  </section>
+
+  <footer>
+    Sve se obrađuje lokalno u tvom pretraživaču — čitanje slike (OCR) i tumačenje rade na uređaju, ništa se ne šalje na server.<br>
+    Razumem nalaz · edukativna alatka · nije zamena za lekarski pregled
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
