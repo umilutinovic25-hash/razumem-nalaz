@@ -128,6 +128,53 @@ textarea::placeholder{color:var(--ink-3)}
 .stat .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 
 h2.section{font-family:var(--serif);font-weight:600;font-size:21px;margin:32px 0 4px;letter-spacing:-.01em}
+.section-sub{color:var(--ink-3);font-size:13px;margin:0 0 16px}
+
+/* Sačuvaj u istoriju */
+.save-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;
+  padding-top:14px;border-top:1px solid var(--line)}
+.save-lab{font-size:12.5px;color:var(--ink-3)}
+.save-row input[type="date"]{font-family:inherit;font-size:14px;color:var(--ink);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:8px 11px}
+.save-row input[type="date"]:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.save-note{font-size:13px;color:var(--ok);font-weight:600}
+.btn.sm{padding:8px 14px;font-size:13px}
+
+/* Istorija */
+.hist-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.hist-list{display:flex;flex-direction:column;gap:10px}
+.hist-item{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  box-shadow:var(--shadow);padding:13px 15px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.hist-item .hd{flex:1;min-width:150px}
+.hist-date{font-weight:600;font-size:15px;font-variant-numeric:tabular-nums}
+.hist-meta{font-size:12.5px;color:var(--ink-3);margin-top:2px}
+.hist-badges{display:flex;gap:6px;flex-wrap:wrap}
+.mini{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
+  padding:2px 9px;border-radius:999px;font-variant-numeric:tabular-nums}
+.mini.ok{background:var(--ok-soft);color:var(--ok)}
+.mini.warn{background:var(--warn-soft);color:var(--warn)}
+.mini.bad{background:var(--bad-soft);color:var(--bad)}
+.hist-actions{display:flex;gap:6px}
+.icon-btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:7px 12px;
+  cursor:pointer;border:1px solid var(--line-2);background:transparent;color:var(--ink-2);transition:.15s;
+  display:inline-flex;align-items:center;gap:6px}
+.icon-btn:hover{color:var(--ink);border-color:var(--ink-3)}
+.icon-btn.danger:hover{color:var(--bad);border-color:var(--bad)}
+
+/* Trendovi */
+.trend-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.trend-card{background:var(--surface);border:1px solid var(--line);border-radius:13px;
+  box-shadow:var(--shadow);padding:14px 15px}
+.trend-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:2px}
+.trend-name{font-weight:600;font-size:14.5px}
+.trend-abbr{font-size:11px;color:var(--ink-3);font-family:var(--mono)}
+.trend-latest{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:15px;font-weight:600}
+.trend-latest .u{font-size:11px;color:var(--ink-3);font-weight:400;margin-left:2px}
+.trend-delta{font-size:12px;font-family:var(--mono);font-variant-numeric:tabular-nums;margin-bottom:8px}
+.trend-delta.up{color:var(--bad)} .trend-delta.down{color:var(--ok)} .trend-delta.flat{color:var(--ink-3)}
+.trend-svg{width:100%;height:auto;display:block;overflow:visible}
+.trend-dates{display:flex;justify-content:space-between;font-family:var(--mono);
+  font-size:10.5px;color:var(--ink-3);margin-top:5px;font-variant-numeric:tabular-nums}
 
 .cards{display:flex;flex-direction:column;gap:13px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;

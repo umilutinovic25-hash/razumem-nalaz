@@ -3,6 +3,7 @@
 "use strict";
 const el = id => document.getElementById(id);
 let SEX = "m";
+let lastFound = null;   // poslednja uspešna analiza (za čuvanje u istoriju)
 
 /* ---------- Normalizacija i parsiranje teksta ---------- */
 function normalize(s){
@@ -61,11 +62,14 @@ function render(found, unknown){
   cards.innerHTML=""; el("unknown").innerHTML="";
 
   if(found.length===0){
+    lastFound=null;
     empty.classList.add("show"); sum.classList.remove("show"); el("qbox").style.display="none";
     if(unknown.length) renderUnknown(unknown);
     return;
   }
   empty.classList.remove("show");
+  lastFound = found.map(f=>({key:f.p.key, val:f.val}));
+  el("saveNote").textContent="";
 
   const nBad=found.filter(f=>f.cls.s==="bad").length;
   const nWarn=found.filter(f=>f.cls.s==="warn").length;
@@ -150,6 +154,172 @@ function renderQuestions(found){
   }
   el("qlist").innerHTML = q.map(x=>`<li>${x}</li>`).join("");
   el("qbox").style.display="block";
+}
+
+/* ---------- Istorija (localStorage) ---------- */
+const HKEY = "rn_history_v1";
+const paramByKey = {};
+window.DB.forEach(p=>paramByKey[p.key]=p);
+
+function loadHistory(){
+  try{ return JSON.parse(localStorage.getItem(HKEY)||"[]"); }
+  catch(e){ return []; }
+}
+function saveHistory(arr){
+  try{ localStorage.setItem(HKEY, JSON.stringify(arr)); return true; }
+  catch(e){ toast("Nije moguće sačuvati na ovom uređaju (privatni režim?)."); return false; }
+}
+function todayISO(){
+  const d=new Date(), z=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate());
+}
+function fmtDate(iso){
+  const [y,m,d]=iso.split("-"); return d+"."+m+"."+y+".";
+}
+function statusOf(key,val,sex){
+  const p=paramByKey[key]; if(!p) return null;
+  return classify(val, p.ref[sex||"m"]);
+}
+
+function saveCurrent(){
+  if(!lastFound || !lastFound.length){ toast("Prvo analiziraj nalaz pa ga sačuvaj."); return; }
+  const date = el("nalazDate").value || todayISO();
+  const rec = { id:"r"+Date.now()+Math.random().toString(36).slice(2,6),
+                date, sex:SEX, ts:Date.now(),
+                items:lastFound.map(x=>({key:x.key, val:x.val})) };
+  const h = loadHistory(); h.push(rec);
+  if(!saveHistory(h)) return;
+  el("saveNote").textContent="✓ sačuvano";
+  renderHistory(); renderTrends();
+  toast("Nalaz sačuvan u istoriju ("+fmtDate(date)+").");
+}
+
+function deleteRecord(id){
+  const h = loadHistory().filter(r=>r.id!==id);
+  saveHistory(h); renderHistory(); renderTrends();
+}
+function clearHistory(){
+  saveHistory([]); renderHistory(); renderTrends();
+  toast("Istorija obrisana.");
+}
+
+function showRecord(rec){
+  // rekonstruiši tekst i re-analiziraj sa polom iz zapisa
+  const lines = rec.items.map(it=>{
+    const p=paramByKey[it.key]; if(!p) return "";
+    return p.name+"  "+fmtNum(it.val)+" "+p.unit;
+  }).filter(Boolean);
+  el("input").value = lines.join("\n");
+  SEX = rec.sex || "m";
+  document.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed", x.dataset.sex===SEX?"true":"false"));
+  el("nalazDate").value = rec.date;
+  analyze();
+}
+
+function renderHistory(){
+  const h = loadHistory().slice().sort((a,b)=> b.date.localeCompare(a.date) || b.ts-a.ts);
+  const sec=el("history"), list=el("histList");
+  if(!h.length){ sec.style.display="none"; return; }
+  sec.style.display="block"; list.innerHTML="";
+  for(const rec of h){
+    let ok=0,warn=0,bad=0;
+    for(const it of rec.items){ const c=statusOf(it.key,it.val,rec.sex); if(!c)continue;
+      if(c.s==="ok")ok++; else if(c.s==="warn")warn++; else bad++; }
+    const div=document.createElement("div"); div.className="hist-item";
+    div.innerHTML=`
+      <div class="hd">
+        <div class="hist-date">${fmtDate(rec.date)}</div>
+        <div class="hist-meta">${rec.items.length} ${rec.items.length===1?"parametar":"parametara"} · ${rec.sex==='m'?'muškarac':'žena'}</div>
+      </div>
+      <div class="hist-badges">
+        ${ok?`<span class="mini ok">${ok} u opsegu</span>`:""}
+        ${warn?`<span class="mini warn">${warn} blago</span>`:""}
+        ${bad?`<span class="mini bad">${bad} van</span>`:""}
+      </div>
+      <div class="hist-actions">
+        <button class="icon-btn" data-act="show">Prikaži</button>
+        <button class="icon-btn danger" data-act="del" aria-label="Obriši nalaz">Obriši</button>
+      </div>`;
+    div.querySelector('[data-act="show"]').addEventListener("click",()=>showRecord(rec));
+    div.querySelector('[data-act="del"]').addEventListener("click",()=>deleteRecord(rec.id));
+    list.appendChild(div);
+  }
+}
+
+function renderTrends(){
+  const h = loadHistory().slice().sort((a,b)=> a.date.localeCompare(b.date) || a.ts-b.ts);
+  const sec=el("trends"), list=el("trendList");
+  // grupiši po parametru: samo oni sa >=2 merenja
+  const byKey={};
+  for(const rec of h) for(const it of rec.items){
+    (byKey[it.key]=byKey[it.key]||[]).push({date:rec.date, val:it.val, sex:rec.sex});
+  }
+  const keys = window.DB.map(p=>p.key).filter(k=> byKey[k] && byKey[k].length>=2);
+  if(!keys.length){ sec.style.display="none"; return; }
+  sec.style.display="block"; list.innerHTML="";
+  for(const key of keys){
+    const p=paramByKey[key];
+    const series=byKey[key].map(s=>({date:s.date, val:s.val, sex:s.sex||"m", cls:classify(s.val, p.ref[s.sex||"m"])}));
+    list.appendChild(makeTrendCard(p, series));
+  }
+}
+
+function makeTrendCard(p, series){
+  const latest=series[series.length-1], prev=series.length>1?series[series.length-2]:null;
+  // referentni opseg prema polu iz poslednjeg (najnovijeg) merenja
+  const [refLo,refHi]=p.ref[latest.sex||"m"];
+  const rank={ok:0,warn:1,bad:2};
+  let deltaHTML="";
+  if(prev){
+    const d=latest.val-prev.val;
+    const dir = d>0?"up":(d<0?"down":"flat");
+    const arrow = d>0?"↑":(d<0?"↓":"→");
+    // boja: da li se status popravio (ka opsegu) ili pogoršao
+    const better = rank[latest.cls.s] < rank[prev.cls.s];
+    const worse  = rank[latest.cls.s] > rank[prev.cls.s];
+    const cls = better?"down":(worse?"up":"flat");
+    deltaHTML=`<div class="trend-delta ${cls}" title="${better?'približilo se opsegu':worse?'udaljilo od opsega':'ista kategorija'}">${arrow} ${d>0?"+":""}${fmtNum(d)} ${p.unit} od prošlog</div>`;
+  } else {
+    deltaHTML=`<div class="trend-delta flat">jedno merenje</div>`;
+  }
+
+  const svg = sparkline(series, refLo, refHi);
+  const card=document.createElement("div"); card.className="trend-card";
+  card.innerHTML=`
+    <div class="trend-top">
+      <div class="trend-name">${p.name} <span class="trend-abbr">${p.abbr}</span></div>
+      <div class="trend-latest" style="color:${latest.cls.s==='ok'?'var(--ink)':'var(--'+latest.cls.s+')'}">${fmtNum(latest.val)}<span class="u">${p.unit}</span></div>
+    </div>
+    ${deltaHTML}
+    ${svg}
+    <div class="trend-dates"><span>${fmtDate(series[0].date)}</span><span>${fmtDate(latest.date)}</span></div>`;
+  return card;
+}
+
+function sparkline(series, lo, hi){
+  const W=240, H=62, padX=7, padT=9, padB=9;
+  const vals=series.map(s=>s.val);
+  let ymin=Math.min(lo,...vals), ymax=Math.max(hi,...vals);
+  if(ymax===ymin){ ymax+=1; ymin-=1; }
+  const spanY=(ymax-ymin)*0.12; ymin-=spanY; ymax+=spanY;
+  const n=series.length;
+  const X=i=> n===1 ? W/2 : padX + i*(W-2*padX)/(n-1);
+  const Y=v=> padT + (ymax-v)/(ymax-ymin)*(H-padT-padB);
+  const bandTop=Y(hi), bandBot=Y(lo);
+  const pts=series.map((s,i)=>[X(i),Y(s.val)]);
+  const poly=pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ");
+  const dots=series.map((s,i)=>{
+    const last=i===n-1;
+    const col = s.cls.s==="ok"?"var(--ok)":s.cls.s==="warn"?"var(--warn)":"var(--bad)";
+    return `<circle cx="${pts[i][0].toFixed(1)}" cy="${pts[i][1].toFixed(1)}" r="${last?4:3}" fill="${col}"${last?' stroke="var(--surface)" stroke-width="2"':''}></circle>`;
+  }).join("");
+  return `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="trend">
+    <rect x="0" y="${Math.min(bandTop,bandBot).toFixed(1)}" width="${W}" height="${Math.abs(bandBot-bandTop).toFixed(1)}" fill="var(--ok-soft)"></rect>
+    <line x1="0" y1="${bandTop.toFixed(1)}" x2="${W}" y2="${bandTop.toFixed(1)}" stroke="var(--ok)" stroke-width="0.6" stroke-dasharray="3 3" opacity="0.55"></line>
+    <line x1="0" y1="${bandBot.toFixed(1)}" x2="${W}" y2="${bandBot.toFixed(1)}" stroke="var(--ok)" stroke-width="0.6" stroke-dasharray="3 3" opacity="0.55"></line>
+    ${n>1?`<polyline points="${poly}" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></polyline>`:""}
+    ${dots}
+  </svg>`;
 }
 
 /* ---------- OCR (čitanje sa slike) ---------- */
@@ -247,6 +417,13 @@ document.querySelectorAll(".seg button").forEach(b=>{
   });
 });
 el("input").addEventListener("keydown",e=>{ if((e.metaKey||e.ctrlKey)&&e.key==="Enter") analyze(); });
+
+/* Istorija — dugmad i init */
+el("nalazDate").value = todayISO();
+el("saveBtn").addEventListener("click", saveCurrent);
+el("clearHist").addEventListener("click", clearHistory);
+renderHistory();
+renderTrends();
 
 /* ---------- Tema ---------- */
 const themeLbl=el("themeLbl");

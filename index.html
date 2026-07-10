@@ -96,6 +96,15 @@ TSH               3,1 mIU/L"></textarea>
   <section class="summary" id="summary" aria-live="polite">
     <h2 class="section">Pregled</h2>
     <div class="sum-grid" id="sumGrid"></div>
+    <div class="save-row" id="saveRow">
+      <label class="save-lab" for="nalazDate">Datum nalaza</label>
+      <input type="date" id="nalazDate">
+      <button class="btn primary" id="saveBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 4h11l3 3v13a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 4v5h7M8 21v-6h8v6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        Sačuvaj u istoriju
+      </button>
+      <span class="save-note" id="saveNote"></span>
+    </div>
   </section>
 
   <section id="resultsWrap">
@@ -106,6 +115,23 @@ TSH               3,1 mIU/L"></textarea>
       <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="var(--accent)" stroke-width="2"/></svg> Pitanja za lekara</h3>
       <ul id="qlist"></ul>
     </div>
+  </section>
+
+  <section id="trends" class="trends" style="display:none">
+    <h2 class="section">Trendovi kroz vreme</h2>
+    <p class="section-sub">Kako se svaki parametar menjao kroz sačuvane nalaze. Zelena zona je referentni opseg.</p>
+    <div id="trendList" class="trend-list"></div>
+  </section>
+
+  <section id="history" class="hist" style="display:none">
+    <div class="hist-head">
+      <div>
+        <h2 class="section">Istorija nalaza</h2>
+        <p class="section-sub">Sačuvani nalazi — čuvaju se samo na ovom uređaju.</p>
+      </div>
+      <button class="btn ghost sm" id="clearHist">Obriši sve</button>
+    </div>
+    <div id="histList" class="hist-list"></div>
   </section>
 
   <footer>
