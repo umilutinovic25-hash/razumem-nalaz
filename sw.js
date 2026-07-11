@@ -1,7 +1,7 @@
 /* Service worker — offline keš. Aplikacija radi i bez interneta posle prve posete. */
-const CACHE = "razumem-nalaz-v4";
+const CACHE = "razumem-nalaz-v5";
 const CORE = [
-  "./","./index.html","./styles.css","./app.js","./db.js",
+  "./","./index.html","./styles.css","./app.js","./db.js","./fonts/fonts.css",
   "./manifest.webmanifest","./icons/icon.svg","./icons/icon-192.png","./icons/icon-512.png"
 ];
 
