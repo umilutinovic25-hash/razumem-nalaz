@@ -136,10 +136,10 @@ function render(found, unknown){
   const nWarn=found.filter(f=>f.cls.s==="warn").length;
   const nOk=found.filter(f=>f.cls.s==="ok").length;
   sg.innerHTML=`
-    <div class="stat"><div class="n">${found.length}</div><div class="l">prepoznatih parametara</div></div>
-    <div class="stat ok"><div class="n"><span class="dot" style="background:var(--ok)"></span>${nOk}</div><div class="l">u referentnom opsegu</div></div>
-    <div class="stat warn"><div class="n"><span class="dot" style="background:var(--warn)"></span>${nWarn}</div><div class="l">blago van opsega</div></div>
-    <div class="stat bad"><div class="n"><span class="dot" style="background:var(--bad)"></span>${nBad}</div><div class="l">izrazito van opsega</div></div>`;
+    <div class="stat" style="--i:0"><div class="n">${found.length}</div><div class="l">prepoznatih parametara</div></div>
+    <div class="stat ok" style="--i:1"><div class="n"><span class="dot" style="background:var(--ok)"></span>${nOk}</div><div class="l">u referentnom opsegu</div></div>
+    <div class="stat warn" style="--i:2"><div class="n"><span class="dot" style="background:var(--warn)"></span>${nWarn}</div><div class="l">blago van opsega</div></div>
+    <div class="stat bad" style="--i:3"><div class="n"><span class="dot" style="background:var(--bad)"></span>${nBad}</div><div class="l">izrazito van opsega</div></div>`;
   sum.classList.add("show");
 
   // filter dugme
@@ -155,13 +155,15 @@ function render(found, unknown){
   const visible = found.filter(f=> showAll || f.cls.s!=="ok");
   const byCat = {};
   for(const f of visible){ (byCat[f.p.cat]=byCat[f.p.cat]||[]).push(f); }
+  let ai = 0;
+  const stagger = node => { node.style.setProperty("--i", Math.min(ai++, 14)); return node; };
   for(const cat of Object.keys(CATS)){
     const items = byCat[cat]; if(!items || !items.length) continue;
     const head = document.createElement("div");
     head.className="cat-head";
     head.innerHTML=`<span>${CATS[cat]}</span><span class="cat-count">${items.length}</span>`;
-    cards.appendChild(head);
-    for(const f of items) cards.appendChild(makeCard(f));
+    cards.appendChild(stagger(head));
+    for(const f of items) cards.appendChild(stagger(makeCard(f)));
   }
 
   if(unknown.length) renderUnknown(unknown);
@@ -630,6 +632,13 @@ el("themeBtn").addEventListener("click",()=>{
   document.documentElement.setAttribute("data-theme", currentDark()?"light":"dark"); syncLbl();
 });
 syncLbl();
+
+/* ---------- Splash (instalirana aplikacija) ---------- */
+if(document.documentElement.classList.contains("is-standalone")){
+  const hideSplash = ()=>{ const s=el("splash"); if(!s) return;
+    s.classList.add("hide"); setTimeout(()=>{ s.style.display="none"; }, 600); };
+  window.addEventListener("load", ()=> setTimeout(hideSplash, 1100));
+}
 
 /* ---------- Service worker ---------- */
 if("serviceWorker" in navigator){

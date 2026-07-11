@@ -5,7 +5,8 @@
 <title>Razumem nalaz — dešifrator laboratorijskih nalaza</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Slikaj laboratorijski nalaz i saznaj šta svaki parametar znači — na srpskom, potpuno lokalno na tvom telefonu.">
-<meta name="theme-color" content="#0e7c86">
+<meta name="theme-color" content="#0c7d80">
+<script>if(matchMedia("(display-mode: standalone)").matches||navigator.standalone){document.documentElement.classList.add("is-standalone")}</script>
 <meta property="og:title" content="Razumem nalaz">
 <meta property="og:description" content="Slikaj laboratorijski nalaz i saznaj šta svaki parametar znači — na srpskom, lokalno na uređaju.">
 <meta property="og:type" content="website">
@@ -21,6 +22,14 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div class="splash" id="splash" aria-hidden="true">
+  <div class="splash-inner">
+    <svg width="72" height="72" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path class="ekg" d="M2 12h4l2-7 4 14 2.5-7H22" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="splash-name">Razumem nalaz</div>
+  </div>
+</div>
 <div class="wrap">
   <header class="top">
     <div>
@@ -201,7 +210,7 @@ TSH               3,1 mIU/L"></textarea>
 
   <footer>
     Sve se obrađuje lokalno u tvom pretraživaču — čitanje slike (OCR) i tumačenje rade na uređaju, ništa se ne šalje na server.<br>
-    Razumem nalaz · edukativna alatka · nije zamena za lekarski pregled · v1.3
+    Razumem nalaz · edukativna alatka · nije zamena za lekarski pregled · v1.4
   </footer>
 </div>
 

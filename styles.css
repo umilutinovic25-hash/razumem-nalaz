@@ -235,7 +235,25 @@ h2.section{font-family:var(--serif);font-weight:600;font-size:23px;margin:34px 0
 .trend-dates{display:flex;justify-content:space-between;font-family:var(--mono);
   font-size:10.5px;color:var(--ink-3);margin-top:5px;font-variant-numeric:tabular-nums}
 
+/* Splash — samo kada je pokrenuto kao instalirana aplikacija */
+.splash{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;
+  background:var(--bg);transition:opacity .55s ease}
+html.is-standalone .splash{display:flex}
+.splash.hide{opacity:0;pointer-events:none}
+.splash-inner{display:flex;flex-direction:column;align-items:center;gap:18px;
+  animation:splashPop .6s cubic-bezier(.2,.8,.2,1) both}
+.splash svg{filter:drop-shadow(0 6px 18px var(--glow-a))}
+.splash .ekg{stroke-dasharray:44;stroke-dashoffset:44;animation:draw 1s ease .15s forwards}
+.splash-name{font-family:var(--serif);font-size:30px;font-weight:600;letter-spacing:-.025em;color:var(--ink);
+  opacity:0;animation:fadeUp .5s ease .55s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes splashPop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 .cards{display:flex;flex-direction:column;gap:13px}
+.card,.cat-head,.stat{animation:riseIn .5s cubic-bezier(.2,.7,.2,1) both;
+  animation-delay:calc(var(--i,0) * 45ms)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
   box-shadow:var(--shadow);overflow:hidden;transition:transform .18s,box-shadow .18s,border-color .18s}
 .card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lift);border-color:var(--line-2)}
