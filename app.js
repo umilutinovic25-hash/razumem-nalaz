@@ -1,20 +1,27 @@
-/* Razumem nalaz — parsiranje, OCR i prikaz. Sve radi lokalno u pretraživaču. */
+/* Razumem nalaz — parsiranje, OCR, istorija, izvoz. Sve radi lokalno u pretraživaču. */
 (function(){
 "use strict";
 const el = id => document.getElementById(id);
-let SEX = "m";
-let lastFound = null;   // poslednja uspešna analiza (za čuvanje u istoriju)
+const DB = window.DB, CATS = window.CATS;
+const APP_VERSION = "1.1.0";
 
-/* ---------- Normalizacija i parsiranje teksta ---------- */
+let SEX = "m";
+let AGE = "odrasli";          // odrasli | dete | stariji
+let showAll = true;           // filter: sve vs samo van opsega
+let lastFound = null;         // poslednja uspešna analiza (za čuvanje/izvoz)
+let lastMeta = null;          // {sex, age, date}
+
+const paramByKey = {};
+DB.forEach(p => paramByKey[p.key] = p);
+
+/* ---------- Normalizacija i parsiranje ---------- */
 function normalize(s){
   return s.toLowerCase()
     .replace(/[čć]/g,"c").replace(/š/g,"s").replace(/ž/g,"z").replace(/đ/g,"dj")
     .replace(/\s+/g," ").trim();
 }
 function parseNumber(str){
-  // izbaci deo posle "referentni/opseg" da ne pokupimo granice opsega umesto rezultata
-  let s = str.replace(/[–—]/g,"-");
-  // uzmi prvi "samostalan" broj; zarez kao decimala
+  const s = str.replace(/[–—]/g,"-");
   const m = s.match(/(?:^|[\s:=])(-?\d{1,4}(?:[.,]\d{1,3})?)/);
   if(!m) return null;
   const n = parseFloat(m[1].replace(",","."));
@@ -22,20 +29,26 @@ function parseNumber(str){
 }
 function findParam(lineNorm){
   let best=null, bestLen=0;
-  for(const p of window.DB){
+  for(const p of DB){
     for(const s of p.syn){
       const sn = normalize(s);
-      // reč mora da se pojavi kao deo reda; duži poklopac pobeđuje (LDL vs HDL i sl.)
       if(lineNorm.includes(sn) && sn.length>bestLen){ best=p; bestLen=sn.length; }
     }
   }
   return best;
 }
-function classify(val, ref){
-  const [lo,hi]=ref, span=(hi-lo)||1, tol=span*0.10;
+function classify(val, range){
+  const [lo,hi]=range, span=(hi-lo)||1, tol=span*0.10;
   if(val < lo) return {s: val < lo-tol ? "bad":"warn", dir:"low"};
   if(val > hi) return {s: val > hi+tol ? "bad":"warn", dir:"high"};
   return {s:"ok", dir:"in"};
+}
+function refFor(p, sex, age){
+  if(age==="dete"){
+    if(p.child) return { range:p.child[sex]||p.child.m, band:"dete" };
+    return { range:p.ref[sex], band:"dete-fallback" };
+  }
+  return { range:p.ref[sex], band:"odrasli" };
 }
 function fmtNum(n){ return (Math.round(n*100)/100).toString().replace(".",","); }
 
@@ -49,7 +62,8 @@ function analyze(){
     const val = parseNumber(line);
     if(p && val!==null && !seen.has(p.key)){
       seen.add(p.key);
-      found.push({p, val, cls:classify(val, p.ref[SEX])});
+      const r = refFor(p, SEX, AGE);
+      found.push({p, val, range:r.range, band:r.band, cls:classify(val, r.range)});
     } else if(val!==null && !p && line.length>2){
       unknown.push(line);
     }
@@ -63,12 +77,15 @@ function render(found, unknown){
 
   if(found.length===0){
     lastFound=null;
-    empty.classList.add("show"); sum.classList.remove("show"); el("qbox").style.display="none";
+    empty.classList.add("show"); sum.classList.remove("show");
+    el("qbox").style.display="none"; el("resultsBar").style.display="none";
+    el("ageBanner").style.display="none";
     if(unknown.length) renderUnknown(unknown);
     return;
   }
   empty.classList.remove("show");
   lastFound = found.map(f=>({key:f.p.key, val:f.val}));
+  lastMeta = { sex:SEX, age:AGE, date: el("nalazDate").value || todayISO() };
   el("saveNote").textContent="";
 
   const nBad=found.filter(f=>f.cls.s==="bad").length;
@@ -81,17 +98,36 @@ function render(found, unknown){
     <div class="stat bad"><div class="n"><span class="dot" style="background:var(--bad)"></span>${nBad}</div><div class="l">izrazito van opsega</div></div>`;
   sum.classList.add("show");
 
-  const order={bad:0,warn:1,ok:2};
-  found.sort((a,b)=>order[a.cls.s]-order[b.cls.s]);
-  for(const f of found) cards.appendChild(makeCard(f));
+  // filter dugme
+  const outCount = nWarn+nBad;
+  el("resultsBar").style.display="flex";
+  el("filterToggle").textContent = showAll ? `Prikaži samo van opsega (${outCount})` : "Prikaži sve";
+  el("filterToggle").style.display = outCount>0 ? "inline-flex" : "none";
+  if(outCount===0) showAll=true;
+
+  el("ageBanner").style.display = AGE==="dete" ? "flex" : "none";
+
+  // grupiši po kategoriji (panelu), zadrži redosled iz DB
+  const visible = found.filter(f=> showAll || f.cls.s!=="ok");
+  const byCat = {};
+  for(const f of visible){ (byCat[f.p.cat]=byCat[f.p.cat]||[]).push(f); }
+  for(const cat of Object.keys(CATS)){
+    const items = byCat[cat]; if(!items || !items.length) continue;
+    const head = document.createElement("div");
+    head.className="cat-head";
+    head.innerHTML=`<span>${CATS[cat]}</span><span class="cat-count">${items.length}</span>`;
+    cards.appendChild(head);
+    for(const f of items) cards.appendChild(makeCard(f));
+  }
+
   if(unknown.length) renderUnknown(unknown);
   renderQuestions(found);
   sum.scrollIntoView({behavior:"smooth",block:"start"});
 }
 
 function makeCard(f){
-  const {p,val,cls}=f;
-  const [lo,hi]=p.ref[SEX];
+  const {p,val,cls,range}=f;
+  const [lo,hi]=range;
   const badgeTxt = cls.s==="ok" ? "U opsegu" : (cls.dir==="high" ? "Povišeno" : "Sniženo");
   const arrow = cls.dir==="high"
     ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
@@ -103,6 +139,7 @@ function makeCard(f){
   let pos=((val-vmin)/(vmax-vmin))*100; pos=Math.max(2,Math.min(98,pos));
   const zL=((lo-vmin)/(vmax-vmin))*100, zR=((hi-vmin)/(vmax-vmin))*100;
 
+  const noteTxt = f.band==="dete" ? "opseg za decu" : f.band==="dete-fallback" ? "opseg za odrasle" : "referentni opseg ("+(SEX==="m"?"M":"Ž")+")";
   const meaning = cls.s==="ok" ? p.what
       : `<strong>${badgeTxt}.</strong> ${cls.dir==="high"?p.high:p.low}`;
 
@@ -119,7 +156,7 @@ function makeCard(f){
           <div class="zone" style="left:${zL}%;right:${100-zR}%"></div>
           <div class="marker ${cls.s}" style="left:${pos}%"></div>
         </div>
-        <div class="rangelabels"><span>${fmtNum(lo)}</span><span>referentni opseg (${SEX==='m'?'M':'Ž'})</span><span>${fmtNum(hi)}</span></div>
+        <div class="rangelabels"><span>${fmtNum(lo)}</span><span>${noteTxt}</span><span>${fmtNum(hi)}</span></div>
       </div>
       <div class="explain">
         <p class="what">${p.what}</p>
@@ -158,12 +195,10 @@ function renderQuestions(found){
 
 /* ---------- Istorija (localStorage) ---------- */
 const HKEY = "rn_history_v1";
-const paramByKey = {};
-window.DB.forEach(p=>paramByKey[p.key]=p);
+let undoBuffer = null;
 
 function loadHistory(){
-  try{ return JSON.parse(localStorage.getItem(HKEY)||"[]"); }
-  catch(e){ return []; }
+  try{ return JSON.parse(localStorage.getItem(HKEY)||"[]"); }catch(e){ return []; }
 }
 function saveHistory(arr){
   try{ localStorage.setItem(HKEY, JSON.stringify(arr)); return true; }
@@ -173,19 +208,19 @@ function todayISO(){
   const d=new Date(), z=n=>String(n).padStart(2,"0");
   return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate());
 }
-function fmtDate(iso){
-  const [y,m,d]=iso.split("-"); return d+"."+m+"."+y+".";
-}
-function statusOf(key,val,sex){
+function fmtDate(iso){ const [y,m,d]=iso.split("-"); return d+"."+m+"."+y+"."; }
+function ageLabel(a){ return a==="dete"?"dete":a==="stariji"?"stariji":"odrasli"; }
+
+function statusOfItem(key,val,sex,age){
   const p=paramByKey[key]; if(!p) return null;
-  return classify(val, p.ref[sex||"m"]);
+  return classify(val, refFor(p, sex||"m", age||"odrasli").range);
 }
 
 function saveCurrent(){
   if(!lastFound || !lastFound.length){ toast("Prvo analiziraj nalaz pa ga sačuvaj."); return; }
   const date = el("nalazDate").value || todayISO();
   const rec = { id:"r"+Date.now()+Math.random().toString(36).slice(2,6),
-                date, sex:SEX, ts:Date.now(),
+                date, sex:SEX, age:AGE, ts:Date.now(),
                 items:lastFound.map(x=>({key:x.key, val:x.val})) };
   const h = loadHistory(); h.push(rec);
   if(!saveHistory(h)) return;
@@ -193,25 +228,34 @@ function saveCurrent(){
   renderHistory(); renderTrends();
   toast("Nalaz sačuvan u istoriju ("+fmtDate(date)+").");
 }
-
 function deleteRecord(id){
-  const h = loadHistory().filter(r=>r.id!==id);
-  saveHistory(h); renderHistory(); renderTrends();
+  const h = loadHistory();
+  const idx = h.findIndex(r=>r.id===id);
+  if(idx<0) return;
+  undoBuffer = h[idx];
+  h.splice(idx,1); saveHistory(h); renderHistory(); renderTrends();
+  actionToast("Nalaz obrisan.", "Opozovi", ()=>{
+    const cur=loadHistory(); cur.push(undoBuffer); saveHistory(cur);
+    undoBuffer=null; renderHistory(); renderTrends();
+  });
 }
 function clearHistory(){
+  const prev = loadHistory();
+  if(!prev.length) return;
+  undoBuffer = prev;
   saveHistory([]); renderHistory(); renderTrends();
-  toast("Istorija obrisana.");
+  actionToast("Cela istorija obrisana.", "Opozovi", ()=>{
+    saveHistory(undoBuffer); undoBuffer=null; renderHistory(); renderTrends();
+  });
 }
-
 function showRecord(rec){
-  // rekonstruiši tekst i re-analiziraj sa polom iz zapisa
   const lines = rec.items.map(it=>{
     const p=paramByKey[it.key]; if(!p) return "";
     return p.name+"  "+fmtNum(it.val)+" "+p.unit;
   }).filter(Boolean);
   el("input").value = lines.join("\n");
-  SEX = rec.sex || "m";
-  document.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed", x.dataset.sex===SEX?"true":"false"));
+  SEX = rec.sex || "m"; AGE = rec.age || "odrasli";
+  syncSeg("sex", SEX); syncSeg("age", AGE);
   el("nalazDate").value = rec.date;
   analyze();
 }
@@ -223,13 +267,13 @@ function renderHistory(){
   sec.style.display="block"; list.innerHTML="";
   for(const rec of h){
     let ok=0,warn=0,bad=0;
-    for(const it of rec.items){ const c=statusOf(it.key,it.val,rec.sex); if(!c)continue;
+    for(const it of rec.items){ const c=statusOfItem(it.key,it.val,rec.sex,rec.age); if(!c)continue;
       if(c.s==="ok")ok++; else if(c.s==="warn")warn++; else bad++; }
     const div=document.createElement("div"); div.className="hist-item";
     div.innerHTML=`
       <div class="hd">
         <div class="hist-date">${fmtDate(rec.date)}</div>
-        <div class="hist-meta">${rec.items.length} ${rec.items.length===1?"parametar":"parametara"} · ${rec.sex==='m'?'muškarac':'žena'}</div>
+        <div class="hist-meta">${rec.items.length} ${rec.items.length===1?"parametar":"parametara"} · ${rec.sex==='m'?'muškarac':'žena'} · ${ageLabel(rec.age)}</div>
       </div>
       <div class="hist-badges">
         ${ok?`<span class="mini ok">${ok} u opsegu</span>`:""}
@@ -249,32 +293,28 @@ function renderHistory(){
 function renderTrends(){
   const h = loadHistory().slice().sort((a,b)=> a.date.localeCompare(b.date) || a.ts-b.ts);
   const sec=el("trends"), list=el("trendList");
-  // grupiši po parametru: samo oni sa >=2 merenja
   const byKey={};
   for(const rec of h) for(const it of rec.items){
-    (byKey[it.key]=byKey[it.key]||[]).push({date:rec.date, val:it.val, sex:rec.sex});
+    (byKey[it.key]=byKey[it.key]||[]).push({date:rec.date, val:it.val, sex:rec.sex, age:rec.age});
   }
-  const keys = window.DB.map(p=>p.key).filter(k=> byKey[k] && byKey[k].length>=2);
+  const keys = DB.map(p=>p.key).filter(k=> byKey[k] && byKey[k].length>=2);
   if(!keys.length){ sec.style.display="none"; return; }
   sec.style.display="block"; list.innerHTML="";
   for(const key of keys){
     const p=paramByKey[key];
-    const series=byKey[key].map(s=>({date:s.date, val:s.val, sex:s.sex||"m", cls:classify(s.val, p.ref[s.sex||"m"])}));
+    const series=byKey[key].map(s=>({date:s.date, val:s.val, sex:s.sex||"m", age:s.age||"odrasli",
+      cls:classify(s.val, refFor(p, s.sex||"m", s.age||"odrasli").range)}));
     list.appendChild(makeTrendCard(p, series));
   }
 }
-
 function makeTrendCard(p, series){
   const latest=series[series.length-1], prev=series.length>1?series[series.length-2]:null;
-  // referentni opseg prema polu iz poslednjeg (najnovijeg) merenja
-  const [refLo,refHi]=p.ref[latest.sex||"m"];
+  const [refLo,refHi]=refFor(p, latest.sex, latest.age).range;
   const rank={ok:0,warn:1,bad:2};
   let deltaHTML="";
   if(prev){
     const d=latest.val-prev.val;
-    const dir = d>0?"up":(d<0?"down":"flat");
     const arrow = d>0?"↑":(d<0?"↓":"→");
-    // boja: da li se status popravio (ka opsegu) ili pogoršao
     const better = rank[latest.cls.s] < rank[prev.cls.s];
     const worse  = rank[latest.cls.s] > rank[prev.cls.s];
     const cls = better?"down":(worse?"up":"flat");
@@ -282,8 +322,6 @@ function makeTrendCard(p, series){
   } else {
     deltaHTML=`<div class="trend-delta flat">jedno merenje</div>`;
   }
-
-  const svg = sparkline(series, refLo, refHi);
   const card=document.createElement("div"); card.className="trend-card";
   card.innerHTML=`
     <div class="trend-top">
@@ -291,11 +329,10 @@ function makeTrendCard(p, series){
       <div class="trend-latest" style="color:${latest.cls.s==='ok'?'var(--ink)':'var(--'+latest.cls.s+')'}">${fmtNum(latest.val)}<span class="u">${p.unit}</span></div>
     </div>
     ${deltaHTML}
-    ${svg}
+    ${sparkline(series, refLo, refHi)}
     <div class="trend-dates"><span>${fmtDate(series[0].date)}</span><span>${fmtDate(latest.date)}</span></div>`;
   return card;
 }
-
 function sparkline(series, lo, hi){
   const W=240, H=62, padX=7, padT=9, padB=9;
   const vals=series.map(s=>s.val);
@@ -322,6 +359,113 @@ function sparkline(series, lo, hi){
   </svg>`;
 }
 
+/* ---------- Izvoz ---------- */
+function download(filename, content, mime){
+  const blob = new Blob([content], {type:mime||"text/plain;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+function csvCell(v){ const s=String(v); return /[;"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+
+function exportResultsCSV(){
+  if(!lastFound || !lastFound.length){ toast("Nema analize za izvoz."); return; }
+  const rows=[["Datum","Parametar","Skraćenica","Vrednost","Jedinica","Opseg min","Opseg max","Status"]];
+  const date = lastMeta ? lastMeta.date : todayISO();
+  for(const it of lastFound){
+    const p=paramByKey[it.key]; const r=refFor(p, SEX, AGE);
+    const c=classify(it.val, r.range);
+    const st = c.s==="ok"?"u opsegu":(c.dir==="high"?"povišeno":"sniženo");
+    rows.push([date, p.name, p.abbr, fmtNum(it.val), p.unit, fmtNum(r.range[0]), fmtNum(r.range[1]), st]);
+  }
+  const csv = "﻿"+rows.map(r=>r.map(csvCell).join(";")).join("\r\n");
+  download("nalaz-"+date+".csv", csv, "text/csv;charset=utf-8");
+  toast("CSV izvezen.");
+}
+function exportHistoryCSV(){
+  const h=loadHistory(); if(!h.length){ toast("Istorija je prazna."); return; }
+  const rows=[["Datum","Parametar","Skraćenica","Vrednost","Jedinica","Opseg min","Opseg max","Status","Pol","Uzrast"]];
+  h.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(rec=>{
+    rec.items.forEach(it=>{
+      const p=paramByKey[it.key]; if(!p) return;
+      const r=refFor(p, rec.sex||"m", rec.age||"odrasli"); const c=classify(it.val, r.range);
+      const st = c.s==="ok"?"u opsegu":(c.dir==="high"?"povišeno":"sniženo");
+      rows.push([rec.date, p.name, p.abbr, fmtNum(it.val), p.unit, fmtNum(r.range[0]), fmtNum(r.range[1]), st,
+                 rec.sex==="m"?"muškarac":"žena", ageLabel(rec.age)]);
+    });
+  });
+  const csv="﻿"+rows.map(r=>r.map(csvCell).join(";")).join("\r\n");
+  download("istorija-nalaza.csv", csv, "text/csv;charset=utf-8");
+  toast("Istorija izvezena u CSV.");
+}
+function exportBackup(){
+  const h=loadHistory();
+  const data={ app:"razumem-nalaz", version:APP_VERSION, exported:new Date().toISOString(), history:h };
+  download("razumem-nalaz-backup.json", JSON.stringify(data,null,2), "application/json");
+  toast("Backup napravljen ("+h.length+" nalaza).");
+}
+function importBackup(file){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(reader.result);
+      const arr = Array.isArray(data) ? data : data.history;
+      if(!Array.isArray(arr)) throw new Error("nevažeći format");
+      const clean = arr.filter(r=>r && r.date && Array.isArray(r.items)).map(r=>({
+        id: r.id || ("r"+Date.now()+Math.random().toString(36).slice(2,6)),
+        date:r.date, sex:r.sex||"m", age:r.age||"odrasli", ts:r.ts||Date.now(),
+        items:r.items.filter(it=>it&&paramByKey[it.key]&&typeof it.val==="number")
+      })).filter(r=>r.items.length);
+      if(!clean.length){ toast("Backup ne sadrži važeće nalaze."); return; }
+      const prev=loadHistory(); undoBuffer=prev;
+      // spoji, izbegni duple po id
+      const ids=new Set(prev.map(r=>r.id));
+      const merged=prev.concat(clean.filter(r=>!ids.has(r.id)));
+      saveHistory(merged); renderHistory(); renderTrends();
+      actionToast(`Uvezeno ${clean.length} nalaza (ukupno ${merged.length}).`, "Opozovi", ()=>{
+        saveHistory(undoBuffer); undoBuffer=null; renderHistory(); renderTrends();
+      });
+    }catch(e){ toast("Nije moguće pročitati backup fajl."); }
+  };
+  reader.readAsText(file);
+}
+function printReport(){
+  if(!lastFound || !lastFound.length){ toast("Prvo analiziraj nalaz."); return; }
+  const m=lastMeta||{sex:SEX,age:AGE,date:todayISO()};
+  el("printMeta").textContent = `Datum: ${fmtDate(m.date)} · ${m.sex==="m"?"Muškarac":"Žena"} · ${ageLabel(m.age)} · ${lastFound.length} parametara`;
+  window.print();
+}
+
+/* ---------- Toast ---------- */
+let toastT;
+function toast(msg){
+  const t=el("toast"); t.innerHTML=""; t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),4200);
+}
+function actionToast(msg, actionLabel, cb){
+  const t=el("toast"); t.innerHTML="";
+  const span=document.createElement("span"); span.textContent=msg;
+  const btn=document.createElement("button"); btn.className="toast-act"; btn.textContent=actionLabel;
+  btn.addEventListener("click",()=>{ cb(); t.classList.remove("show"); });
+  t.appendChild(span); t.appendChild(btn); t.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),6000);
+}
+
+/* ---------- Segmentne kontrole ---------- */
+function syncSeg(group, val){
+  document.querySelectorAll(`.seg[data-group="${group}"] button`).forEach(b=>
+    b.setAttribute("aria-pressed", b.dataset.val===val ? "true":"false"));
+}
+document.querySelectorAll('.seg[data-group="sex"] button').forEach(b=>{
+  b.addEventListener("click",()=>{ SEX=b.dataset.val; syncSeg("sex",SEX);
+    if(el("summary").classList.contains("show")) analyze(); });
+});
+document.querySelectorAll('.seg[data-group="age"] button').forEach(b=>{
+  b.addEventListener("click",()=>{ AGE=b.dataset.val; syncSeg("age",AGE);
+    if(el("summary").classList.contains("show")) analyze(); });
+});
+
 /* ---------- OCR (čitanje sa slike) ---------- */
 let ocrRunning=false;
 function showOcr(thumbURL){
@@ -337,13 +481,9 @@ function setProg(pct,label){
 }
 async function runOCR(file){
   if(ocrRunning) return;
-  if(typeof Tesseract==="undefined"){
-    toast("Čitač teksta nije učitan — proveri internet pri prvom korišćenju.");
-    return;
-  }
+  if(typeof Tesseract==="undefined"){ toast("Čitač teksta nije učitan — proveri internet pri prvom korišćenju."); return; }
   ocrRunning=true;
-  const url=URL.createObjectURL(file);
-  showOcr(url);
+  const url=URL.createObjectURL(file); showOcr(url);
   try{
     const worker = await Tesseract.createWorker(["eng"], 1, {
       logger:m=>{
@@ -351,33 +491,21 @@ async function runOCR(file){
         else if(m.status && m.progress!=null) setProg(m.progress*0.4, "Pripremam čitač teksta…");
       }
     });
-    // brojevi + tipični znaci u nalazima
     await worker.setParameters({ preserve_interword_spaces:"1" });
     const { data } = await worker.recognize(file);
     await worker.terminate();
     const text=(data && data.text ? data.text : "").trim();
-    el("ocr").classList.remove("show");
-    URL.revokeObjectURL(url);
-    ocrRunning=false;
+    el("ocr").classList.remove("show"); URL.revokeObjectURL(url); ocrRunning=false;
     if(!text){ toast("Nisam uspeo da pročitam tekst. Probaj jasniju, ravniju sliku."); return; }
-    el("input").value=text;
-    analyze();
-    const n=el("cards").children.length;
+    el("input").value=text; analyze();
+    const n=el("cards").querySelectorAll(".card").length;
     toast(n>0 ? `Pročitano — prepoznato ${n} ${n===1?"parametar":"parametara"}. Proveri i po potrebi ispravi tekst.`
               : "Pročitao sam tekst, ali nisam prepoznao parametre. Proveri/ispravi tekst pa „Objasni nalaz“.");
   }catch(err){
     console.error(err);
-    el("ocr").classList.remove("show"); ocrRunning=false;
-    URL.revokeObjectURL(url);
+    el("ocr").classList.remove("show"); ocrRunning=false; URL.revokeObjectURL(url);
     toast("Greška pri čitanju slike. Možeš uneti vrednosti ručno.");
   }
-}
-
-/* ---------- Toast ---------- */
-let toastT;
-function toast(msg){
-  const t=el("toast"); t.textContent=msg; t.classList.add("show");
-  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),4200);
 }
 
 /* ---------- Vezivanje kontrola ---------- */
@@ -390,40 +518,45 @@ el("analyze").addEventListener("click",analyze);
 el("clear").addEventListener("click",()=>{
   el("input").value=""; el("cards").innerHTML=""; el("unknown").innerHTML="";
   el("summary").classList.remove("show"); el("empty").classList.remove("show");
-  el("qbox").style.display="none"; el("input").focus();
+  el("qbox").style.display="none"; el("resultsBar").style.display="none";
+  el("ageBanner").style.display="none"; lastFound=null; el("input").focus();
 });
 el("demo").addEventListener("click",()=>{
   el("input").value=
 `Hemoglobin        118 g/L
 Eritrociti        4,1 x10^12/L
+MCV               76 fL
 Leukociti         11,3 x10^9/L
 Trombociti        260 x10^9/L
 Glukoza           6,4 mmol/L
+HbA1c             6,1 %
 Holesterol        6,8 mmol/L
 LDL               4,3 mmol/L
 HDL               0,9 mmol/L
+Trigliceridi      2,3 mmol/L
+ALT               58 U/L
+GGT               61 U/L
 Gvožđe            7 umol/L
 Feritin           12 ng/mL
-ALT               58 U/L
-TSH               5,7 mIU/L
-Vitamin D         18 ng/mL`;
+Vitamin D         18 ng/mL
+TSH               5,7 mIU/L`;
   analyze();
 });
-document.querySelectorAll(".seg button").forEach(b=>{
-  b.addEventListener("click",()=>{
-    SEX=b.dataset.sex;
-    document.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed", x===b?"true":"false"));
-    if(el("summary").classList.contains("show")) analyze();
-  });
-});
+el("filterToggle").addEventListener("click",()=>{ showAll=!showAll; analyze(); });
+el("btnPrint").addEventListener("click",printReport);
+el("btnCsv").addEventListener("click",exportResultsCSV);
+el("btnHistCsv").addEventListener("click",exportHistoryCSV);
+el("btnBackup").addEventListener("click",exportBackup);
+el("btnImport").addEventListener("click",()=>el("importFile").click());
+el("importFile").addEventListener("change",e=>{ if(e.target.files[0]) importBackup(e.target.files[0]); e.target.value=""; });
+el("clearHist").addEventListener("click",clearHistory);
 el("input").addEventListener("keydown",e=>{ if((e.metaKey||e.ctrlKey)&&e.key==="Enter") analyze(); });
 
-/* Istorija — dugmad i init */
+/* Init */
 el("nalazDate").value = todayISO();
 el("saveBtn").addEventListener("click", saveCurrent);
-el("clearHist").addEventListener("click", clearHistory);
-renderHistory();
-renderTrends();
+syncSeg("sex",SEX); syncSeg("age",AGE);
+renderHistory(); renderTrends();
 
 /* ---------- Tema ---------- */
 const themeLbl=el("themeLbl");
@@ -437,7 +570,7 @@ el("themeBtn").addEventListener("click",()=>{
 });
 syncLbl();
 
-/* ---------- Service worker (offline) ---------- */
+/* ---------- Service worker ---------- */
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }

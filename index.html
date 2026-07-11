@@ -6,6 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Slikaj laboratorijski nalaz i saznaj šta svaki parametar znači — na srpskom, potpuno lokalno na tvom telefonu.">
 <meta name="theme-color" content="#0e7c86">
+<meta property="og:title" content="Razumem nalaz">
+<meta property="og:description" content="Slikaj laboratorijski nalaz i saznaj šta svaki parametar znači — na srpskom, lokalno na uređaju.">
+<meta property="og:type" content="website">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -85,10 +88,18 @@ TSH               3,1 mIU/L"></textarea>
       </button>
       <button class="btn ghost" id="demo">Primer</button>
       <button class="btn ghost" id="clear">Obriši</button>
-      <div class="seg" role="group" aria-label="Pol">
+    </div>
+    <div class="profile">
+      <div class="seg" data-group="sex" role="group" aria-label="Pol">
         <span class="seg-label">Pol:</span>
-        <button data-sex="f" aria-pressed="false">Žena</button>
-        <button data-sex="m" aria-pressed="true">Muškarac</button>
+        <button data-val="f" aria-pressed="false">Žena</button>
+        <button data-val="m" aria-pressed="true">Muškarac</button>
+      </div>
+      <div class="seg" data-group="age" role="group" aria-label="Uzrast">
+        <span class="seg-label">Uzrast:</span>
+        <button data-val="dete" aria-pressed="false">Dete</button>
+        <button data-val="odrasli" aria-pressed="true">Odrasli</button>
+        <button data-val="stariji" aria-pressed="false">65+</button>
       </div>
     </div>
   </section>
@@ -107,8 +118,36 @@ TSH               3,1 mIU/L"></textarea>
     </div>
   </section>
 
+  <div class="print-head" id="printHead" aria-hidden="true">
+    <div class="ph-brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M2 12h4l2-7 4 14 2.5-7H22" stroke="#0e7c86" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <strong>Razumem nalaz</strong>
+    </div>
+    <div class="ph-meta" id="printMeta"></div>
+    <div class="ph-note">Edukativni pregled, nije medicinski nalaz. Referentni opsezi su orijentacioni i variraju po laboratoriji.</div>
+  </div>
+
   <section id="resultsWrap">
     <div class="empty" id="empty">Nema prepoznatih parametara. Proveri da je svaki u svom redu, npr. <code>Hemoglobin 118 g/L</code>.</div>
+
+    <div class="results-bar" id="resultsBar" style="display:none">
+      <button class="chip-btn" id="filterToggle"></button>
+      <div class="rb-spacer"></div>
+      <button class="chip-btn" id="btnPrint" title="Štampaj ili sačuvaj kao PDF">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 9V3h12v6M6 18H4a1 1 0 01-1-1v-5a2 2 0 012-2h14a2 2 0 012 2v5a1 1 0 01-1 1h-2M6 14h12v7H6z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        Štampaj / PDF
+      </button>
+      <button class="chip-btn" id="btnCsv" title="Izvezi u tabelu (CSV)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M14 3v5h5M8 13h2m4 0h2m-8 4h2m4 0h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 3h8l5 5v12a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        CSV
+      </button>
+    </div>
+
+    <div class="age-banner" id="ageBanner" style="display:none">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Za decu se referentni opsezi <b>značajno razlikuju po tačnom uzrastu</b>. Gde nema posebnog dečjeg opsega, prikazan je opseg za odrasle kao gruba orijentacija — tumačenje uvek traži od pedijatra.</span>
+    </div>
+
     <div class="cards" id="cards"></div>
     <div class="unknown" id="unknown"></div>
     <div class="qbox" id="qbox">
@@ -129,14 +168,33 @@ TSH               3,1 mIU/L"></textarea>
         <h2 class="section">Istorija nalaza</h2>
         <p class="section-sub">Sačuvani nalazi — čuvaju se samo na ovom uređaju.</p>
       </div>
-      <button class="btn ghost sm" id="clearHist">Obriši sve</button>
+    </div>
+    <div class="hist-tools">
+      <button class="chip-btn" id="btnHistCsv">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M14 3v5h5M8 13h2m4 0h2m-8 4h2m4 0h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 3h8l5 5v12a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        Izvezi CSV
+      </button>
+      <button class="chip-btn" id="btnBackup">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Backup (JSON)
+      </button>
+      <button class="chip-btn" id="btnImport">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 15V3m0 0L8 7m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Uvezi
+      </button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+      <div class="rb-spacer"></div>
+      <button class="chip-btn danger" id="clearHist">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v12a1 1 0 01-1 1H7a1 1 0 01-1-1V7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Obriši sve
+      </button>
     </div>
     <div id="histList" class="hist-list"></div>
   </section>
 
   <footer>
     Sve se obrađuje lokalno u tvom pretraživaču — čitanje slike (OCR) i tumačenje rade na uređaju, ništa se ne šalje na server.<br>
-    Razumem nalaz · edukativna alatka · nije zamena za lekarski pregled
+    Razumem nalaz · edukativna alatka · nije zamena za lekarski pregled · v1.1
   </footer>
 </div>
 
