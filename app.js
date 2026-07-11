@@ -43,6 +43,30 @@ function classify(val, range){
   if(val > hi) return {s: val > hi+tol ? "bad":"warn", dir:"high"};
   return {s:"ok", dir:"in"};
 }
+/* eGFR: CKD-EPI 2021 (bez rase). Kreatinin u umol/L -> mg/dL. */
+function computeEGFR(creatUmol, age, sex){
+  if(!(creatUmol>0) || !(age>0) || age>120) return null;
+  const scr = creatUmol/88.4;            // mg/dL
+  const female = (sex==="f");
+  const k = female?0.7:0.9, a = female?-0.241:-0.302;
+  const mn = Math.min(scr/k,1), mx = Math.max(scr/k,1);
+  let e = 142 * Math.pow(mn,a) * Math.pow(mx,-1.200) * Math.pow(0.9938,age);
+  if(female) e *= 1.012;
+  return Math.round(e);
+}
+function egfrStage(v){
+  if(v>=90) return {s:"ok",   dir:"in",  label:"Normalno (G1)",            text:"Bubrezi filtriraju u očekivanom opsegu."};
+  if(v>=60) return {s:"warn", dir:"low", label:"Blago snižen (G2)",         text:"Blago snižena filtracija. Uz uredan ostali nalaz, a naročito kod starijih osoba, često nije bolest — ali se prati."};
+  if(v>=45) return {s:"bad",  dir:"low", label:"Umereno snižen (G3a)",      text:"Umereno snižena funkcija bubrega — traži procenu lekara i redovno praćenje."};
+  if(v>=30) return {s:"bad",  dir:"low", label:"Umereno-teško snižen (G3b)",text:"Značajnije snižena funkcija bubrega — potrebna je procena nefrologa."};
+  if(v>=15) return {s:"bad",  dir:"low", label:"Teško snižen (G4)",         text:"Teško snižena funkcija bubrega — potrebna hitna lekarska procena."};
+  return      {s:"bad",  dir:"low", label:"Otkazivanje (G5)",           text:"Vrlo niska filtracija — potrebna hitna lekarska procena."};
+}
+function classifyKey(key, val, sex, age){
+  if(key==="egfr"){ const st=egfrStage(val); return {s:st.s, dir:st.dir}; }
+  const p=paramByKey[key]; if(!p) return null;
+  return classify(val, refFor(p, sex, age).range);
+}
 function refFor(p, sex, age){
   if(age==="dete"){
     if(p.child) return { range:p.child[sex]||p.child.m, band:"dete" };
@@ -62,12 +86,32 @@ function analyze(){
     const val = parseNumber(line);
     if(p && val!==null && !seen.has(p.key)){
       seen.add(p.key);
-      const r = refFor(p, SEX, AGE);
-      found.push({p, val, range:r.range, band:r.band, cls:classify(val, r.range)});
+      if(p.egfr){
+        const st = egfrStage(val);
+        found.push({p, val, egfr:true, cls:{s:st.s,dir:st.dir}, stage:st,
+          bar:{vmin:0,vmax:120,zLo:90,zHi:120}});
+      } else {
+        const r = refFor(p, SEX, AGE);
+        found.push({p, val, range:r.range, band:r.band, cls:classify(val, r.range)});
+      }
     } else if(val!==null && !p && line.length>2){
       unknown.push(line);
     }
   }
+
+  // automatski eGFR iz kreatinina + godina (ako nije već unet)
+  const years = parseInt((el("ageYears").value||"").trim(),10);
+  if(!seen.has("egfr") && seen.has("kreatinin") && years>0 && years<=120){
+    const cre = found.find(f=>f.p.key==="kreatinin");
+    const g = cre ? computeEGFR(cre.val, years, SEX) : null;
+    if(g){
+      const st = egfrStage(g);
+      found.push({p:paramByKey["egfr"], val:g, egfr:true, derived:true,
+        cls:{s:st.s,dir:st.dir}, stage:st, bar:{vmin:0,vmax:120,zLo:90,zHi:120}});
+      seen.add("egfr");
+    }
+  }
+
   render(found, unknown);
 }
 
@@ -125,38 +169,52 @@ function render(found, unknown){
   sum.scrollIntoView({behavior:"smooth",block:"start"});
 }
 
+const ARROW_UP='<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ARROW_DOWN='<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ARROW_OK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function makeCard(f){
-  const {p,val,cls,range}=f;
-  const [lo,hi]=range;
-  const badgeTxt = cls.s==="ok" ? "U opsegu" : (cls.dir==="high" ? "Povišeno" : "Sniženo");
-  const arrow = cls.dir==="high"
-    ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    : cls.dir==="low"
-    ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const {p,val,cls}=f;
+  const arrow = cls.dir==="high" ? ARROW_UP : cls.dir==="low" ? ARROW_DOWN : ARROW_OK;
+  const badgeTxt = f.stage ? f.stage.label
+      : cls.s==="ok" ? "U opsegu" : (cls.dir==="high" ? "Povišeno" : "Sniženo");
 
-  const span=(hi-lo)||1, vmin=lo-span*0.6, vmax=hi+span*0.6;
+  // geometrija trake: eGFR koristi prilagođenu skalu (0–120, zona ≥90), ostali standardni opseg
+  let vmin,vmax,zL,zR,barStyle="",noteTxt,loLbl,hiLbl;
+  if(f.bar){
+    vmin=f.bar.vmin; vmax=f.bar.vmax;
+    zL=((f.bar.zLo-vmin)/(vmax-vmin))*100; zR=((f.bar.zHi-vmin)/(vmax-vmin))*100;
+    barStyle=' style="background:linear-gradient(90deg,var(--bad-soft) 0%,var(--warn-soft) 42%,var(--ok-soft) 72%,var(--ok-soft) 100%)"';
+    noteTxt = f.derived ? "izračunato · zelena zona = normala (≥90)" : "zelena zona = normala (≥90)";
+    loLbl=fmtNum(vmin); hiLbl=fmtNum(vmax);
+  } else {
+    const [lo,hi]=f.range, span=(hi-lo)||1;
+    vmin=lo-span*0.6; vmax=hi+span*0.6;
+    zL=((lo-vmin)/(vmax-vmin))*100; zR=((hi-vmin)/(vmax-vmin))*100;
+    noteTxt = f.band==="dete" ? "opseg za decu" : f.band==="dete-fallback" ? "opseg za odrasle" : "referentni opseg ("+(SEX==="m"?"M":"Ž")+")";
+    loLbl=fmtNum(lo); hiLbl=fmtNum(hi);
+  }
   let pos=((val-vmin)/(vmax-vmin))*100; pos=Math.max(2,Math.min(98,pos));
-  const zL=((lo-vmin)/(vmax-vmin))*100, zR=((hi-vmin)/(vmax-vmin))*100;
 
-  const noteTxt = f.band==="dete" ? "opseg za decu" : f.band==="dete-fallback" ? "opseg za odrasle" : "referentni opseg ("+(SEX==="m"?"M":"Ž")+")";
-  const meaning = cls.s==="ok" ? p.what
+  const meaning = f.stage ? `<strong>${f.stage.label}.</strong> ${f.stage.text}`
+      : cls.s==="ok" ? p.what
       : `<strong>${badgeTxt}.</strong> ${cls.dir==="high"?p.high:p.low}`;
+  const derivedTag = f.derived ? ' <span class="derived-tag">izračunato</span>' : "";
 
   const card=document.createElement("div");
   card.className="card"; card.setAttribute("open-state","0");
   card.innerHTML=`
     <div class="card-main">
-      <div class="pname">${p.name} <span class="pabbr">${p.abbr}</span></div>
+      <div class="pname">${p.name} <span class="pabbr">${p.abbr}</span>${derivedTag}</div>
       <div class="pval"><span class="v" style="color:${cls.s==='ok'?'var(--ink)':'var(--'+cls.s+')'}">${fmtNum(val)}</span><span class="u">${p.unit}</span></div>
       <span class="badge ${cls.s}">${arrow} ${badgeTxt}</span>
       <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div class="rangewrap">
-        <div class="rangebar">
+        <div class="rangebar"${barStyle}>
           <div class="zone" style="left:${zL}%;right:${100-zR}%"></div>
           <div class="marker ${cls.s}" style="left:${pos}%"></div>
         </div>
-        <div class="rangelabels"><span>${fmtNum(lo)}</span><span>${noteTxt}</span><span>${fmtNum(hi)}</span></div>
+        <div class="rangelabels"><span>${loLbl}</span><span>${noteTxt}</span><span>${hiLbl}</span></div>
       </div>
       <div class="explain">
         <p class="what">${p.what}</p>
@@ -212,8 +270,7 @@ function fmtDate(iso){ const [y,m,d]=iso.split("-"); return d+"."+m+"."+y+"."; }
 function ageLabel(a){ return a==="dete"?"dete":a==="stariji"?"stariji":"odrasli"; }
 
 function statusOfItem(key,val,sex,age){
-  const p=paramByKey[key]; if(!p) return null;
-  return classify(val, refFor(p, sex||"m", age||"odrasli").range);
+  return classifyKey(key, val, sex||"m", age||"odrasli");
 }
 
 function saveCurrent(){
@@ -303,7 +360,7 @@ function renderTrends(){
   for(const key of keys){
     const p=paramByKey[key];
     const series=byKey[key].map(s=>({date:s.date, val:s.val, sex:s.sex||"m", age:s.age||"odrasli",
-      cls:classify(s.val, refFor(p, s.sex||"m", s.age||"odrasli").range)}));
+      cls:classifyKey(key, s.val, s.sex||"m", s.age||"odrasli")}));
     list.appendChild(makeTrendCard(p, series));
   }
 }
@@ -375,7 +432,7 @@ function exportResultsCSV(){
   const date = lastMeta ? lastMeta.date : todayISO();
   for(const it of lastFound){
     const p=paramByKey[it.key]; const r=refFor(p, SEX, AGE);
-    const c=classify(it.val, r.range);
+    const c=classifyKey(it.key, it.val, SEX, AGE);
     const st = c.s==="ok"?"u opsegu":(c.dir==="high"?"povišeno":"sniženo");
     rows.push([date, p.name, p.abbr, fmtNum(it.val), p.unit, fmtNum(r.range[0]), fmtNum(r.range[1]), st]);
   }
@@ -389,7 +446,8 @@ function exportHistoryCSV(){
   h.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(rec=>{
     rec.items.forEach(it=>{
       const p=paramByKey[it.key]; if(!p) return;
-      const r=refFor(p, rec.sex||"m", rec.age||"odrasli"); const c=classify(it.val, r.range);
+      const r=refFor(p, rec.sex||"m", rec.age||"odrasli");
+      const c=classifyKey(it.key, it.val, rec.sex||"m", rec.age||"odrasli");
       const st = c.s==="ok"?"u opsegu":(c.dir==="high"?"povišeno":"sniženo");
       rows.push([rec.date, p.name, p.abbr, fmtNum(it.val), p.unit, fmtNum(r.range[0]), fmtNum(r.range[1]), st,
                  rec.sex==="m"?"muškarac":"žena", ageLabel(rec.age)]);
@@ -536,10 +594,12 @@ HDL               0,9 mmol/L
 Trigliceridi      2,3 mmol/L
 ALT               58 U/L
 GGT               61 U/L
+Kreatinin         118 umol/L
 Gvožđe            7 umol/L
 Feritin           12 ng/mL
 Vitamin D         18 ng/mL
 TSH               5,7 mIU/L`;
+  el("ageYears").value = "58";
   analyze();
 });
 el("filterToggle").addEventListener("click",()=>{ showAll=!showAll; analyze(); });
@@ -551,6 +611,7 @@ el("btnImport").addEventListener("click",()=>el("importFile").click());
 el("importFile").addEventListener("change",e=>{ if(e.target.files[0]) importBackup(e.target.files[0]); e.target.value=""; });
 el("clearHist").addEventListener("click",clearHistory);
 el("input").addEventListener("keydown",e=>{ if((e.metaKey||e.ctrlKey)&&e.key==="Enter") analyze(); });
+el("ageYears").addEventListener("input",()=>{ if(el("summary").classList.contains("show")) analyze(); });
 
 /* Init */
 el("nalazDate").value = todayISO();

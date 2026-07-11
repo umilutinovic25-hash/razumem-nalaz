@@ -210,6 +210,13 @@ h2.section{font-family:var(--serif);font-weight:600;font-size:21px;margin:32px 0
 .card-main:hover{background:var(--surface-2)}
 .pname{font-weight:600;font-size:16px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .pabbr{font-size:12px;color:var(--ink-3);font-family:var(--mono);font-weight:500}
+.derived-tag{font-size:10.5px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;
+  color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 8px}
+.years{display:inline-flex;align-items:center;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:10px;padding:3px 3px 3px 0}
+.years input{width:78px;font-family:inherit;font-size:13px;color:var(--ink);background:transparent;
+  border:0;padding:6px 8px}
+.years input:focus{outline:2px solid var(--accent);outline-offset:1px;border-radius:7px}
 .pval{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .pval .v{font-size:21px;font-weight:600}
 .pval .u{font-size:12px;color:var(--ink-3);margin-left:3px}

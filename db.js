@@ -189,6 +189,14 @@ window.DB = [
    low:"Snižen kreatinin ume da bude od male mišićne mase; retko je problematičan.",
    high:"Povišen kreatinin ukazuje na slabiju funkciju bubrega i traži dalju procenu."},
 
+  {key:"egfr", name:"eGFR (procenjena filtracija)", abbr:"eGFR", unit:"mL/min/1.73m²", cat:"bubreg",
+   egfr:true,
+   syn:["egfr","gfr","jgf","glomerularna filtracija","procenjena filtracija"],
+   ref:{m:[90,120], f:[90,120]},
+   what:"eGFR procenjuje koliko dobro bubrezi filtriraju krv. Ova alatka ga računa iz kreatinina, godina i pola (formula CKD-EPI 2021).",
+   low:"Snižen eGFR znači slabiju filtraciju bubrega; trajno ispod 60 ukazuje na hroničnu bolest bubrega.",
+   high:"Visoka vrednost obično nije problem."},
+
   {key:"mokracna", name:"Mokraćna kiselina", abbr:"UA", unit:"umol/L", cat:"bubreg",
    syn:["mokracna kiselina","mokraćna kiselina","urat","uric acid"],
    ref:{m:[200,420], f:[140,340]},
